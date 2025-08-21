@@ -19,22 +19,22 @@ def obt_datapdf(page):
     words = page.extract_words()
 
     # use coordinates to group words into lines in the PDF
-    lines = {}
+    pdf_lines = {}
     for word in words:
         y_coord = int(word['top'])
-        if y_coord not in lines:
-            lines[y_coord] = []
-        lines[y_coord].append(word)
+        if y_coord not in pdf_lines:
+            pdf_lines[y_coord] = []
+        pdf_lines[y_coord].append(word)
     
     final_rows = []
     # iterate over lines vertically
-    for y_coord in sorted(lines.keys()):
+    for y_coord in sorted(pdf_lines.keys()):
         # sort words by horizontal coordinate to preserve the PDF order
-        line_words = sorted(lines[y_coord], key = lambda x:x['x0'])
+        line_words = sorted(pdf_lines[y_coord], key = lambda x:x['x0'])
         
-        fecha = ""
-        concepto = []
-        importe = ""
+        date = ""
+        concept = []
+        amount = ""
         
         # assign values to variables based on horizontal coordinates
         # 20 to 70: date
@@ -43,32 +43,32 @@ def obt_datapdf(page):
         for word in line_words:
             x_coord = word['x0']
             if 25 <= x_coord <= 70:
-                fecha = word['text']
+                date = word['text']
             elif 80 <= x_coord <= 300:
-                concepto.append(word['text'])
+                concept.append(word['text'])
             elif 310 <= x_coord <= 380:
-                importe = word['text']
+                amount = word['text']
                 
         # exclude lines that are not data rows
-        if fecha and importe:
-            if(concepto != "Concepto" and importe != "Importe" and fecha != "Fecha"):
-                final_rows.append([fecha, " ".join(concepto), importe])
+        if date and amount:
+            if(concept != "Concepto" and amount != "Importe" and date != "Fecha"):
+                final_rows.append([date, " ".join(concept), amount])
     return final_rows
 
 # get all sheet names from the .xlsx file and return as a list
-def obt_sheets(arch):
+def obt_sheets(file):
     try:
-        book = openpyxl.load_workbook(arch)
+        book = openpyxl.load_workbook(file)
         return book.sheetnames
     except FileNotFoundError:
-        return f"Error, el archivo '{arch}' no fue encontrado"
+        return f"Error, el archivo '{file}' no fue encontrado"
     
 # return the month name from a string date (dd/mm/yyyy)
-def obt_month(str_fecha):
+def obt_month(str_date):
     locale.setlocale(locale.LC_TIME, "Spanish_Spain")
-    fecha = datetime.strptime(str_fecha, "%d/%m/%Y")
-    mes = fecha.strftime("%B").upper()
-    return mes
+    date = datetime.strptime(str_date, "%d/%m/%Y")
+    month = date.strftime("%B").upper()
+    return month
     
 # keys represent the target column for each type of data
 # values are keywords that may appear in the PDF
@@ -114,22 +114,22 @@ elif (pdf_files):
 elif (txt_file):
     if(len(txt_file) == 1):
      filename = txt_file[0]
-     with open(filename, "r", encoding="utf-8") as f:
+     with open(filename, "r", encoding="utf-8") as open_file:
          start = False
          # search for the header line "FECHA,CONCEPTO,IMPORTE"
-         for x in f:
-             x = x.strip()
+         for f in open_file:
+             f = f.strip()
              if not start:
-                 if x.startswith("FECHA,CONCEPTO,IMPORTE"):
+                 if f.startswith("FECHA,CONCEPTO,IMPORTE"):
                      start = True
-                     headers = x.split(",")
+                     headers = f.split(",")
                      lines.append(headers)
                      # remove the first line since it's the header
                      lines.pop(0)
              else:
                  # if the line is not empty, split by commas to create parts list
-                 if x != "":
-                     parts = [p.strip() for p in x.split(",")]
+                 if f != "":
+                     parts = [p.strip() for p in f.split(",")]
                     
                     # some entries have an extra field (extra commas), remove the third element
                      if(len(parts) > 5):
@@ -137,9 +137,9 @@ elif (txt_file):
                     
                     # validate the date format
                      if(len(parts) > 0):
-                         fecha = parts[0]
+                         date = parts[0]
                          date_pattern = r"^\d{2}/\d{2}/\d{4}$"
-                         match = re.match(date_pattern, fecha)
+                         match = re.match(date_pattern, date)
                          if(match):
                              lines.append(parts)            
 else:
@@ -172,20 +172,20 @@ if(len(excel_file) == 1) and lines:
     row_to_fill = start_index
     
     for line in lines:
-        concepto = line[1].upper()
+        concept = line[1].upper()
         col_excel = None
         
         # check if any keyword is in the dictionary to determine column
         for col, keywords in column_map.items():
             for kw in keywords:
-                if kw and kw in concepto:
+                if kw and kw in concept:
                     col_excel = col
                     break
             if(col_excel):
                 break
         
-        importe = abs(float(line[2]))
-        fecha = line[0]
+        amount = abs(float(line[2]))
+        date = line[0]
         
         #if the next row exceeds the last row, insert a new row 
         if(row_to_fill >= last_index):
@@ -193,12 +193,13 @@ if(len(excel_file) == 1) and lines:
             last_index += 1
         
         # assign values to the corresponding columns
-        if(obt_month(fecha) == month):
+        if(obt_month(date) == month):
             if(col_excel is not None):
-                worksheet.cell(row=row_to_fill, column=1, value=fecha)
-                worksheet.cell(row=row_to_fill, column=2, value=concepto)
-                worksheet.cell(row=row_to_fill,column=col_excel+1, value=importe)
+                worksheet.cell(row=row_to_fill, column=1, value=date)
+                worksheet.cell(row=row_to_fill, column=2, value=concept)
+                worksheet.cell(row=row_to_fill,column=col_excel+1, value=amount)
             else:
+                # if the column is none, assign a empty value in random column
                 worksheet.cell(row=row_to_fill, column=3, value="")
 
             # apply borders to columns 1 to 20
